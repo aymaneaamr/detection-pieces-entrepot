@@ -1,19 +1,16 @@
 """
 Application Streamlit pour la détection de pièces d'entrepôt
-Version corrigée - Utilisation de YOLOv5 via torch.hub
+Version simplifiée sans torch.hub
 """
 
 import streamlit as st
 import cv2
 import numpy as np
-import torch
-import tempfile
-import os
 from PIL import Image
 import pandas as pd
 from datetime import datetime
-import requests
-from pathlib import Path
+import os
+import tempfile
 
 # Configuration de la page
 st.set_page_config(
@@ -30,35 +27,17 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ Configuration")
     
-    # Choix de la source
-    source = st.radio(
-        "Source d'image:",
-        ["📷 Caméra", "📁 Upload image", "🎥 Vidéo"]
-    )
-    
     # Seuil de confiance
     confidence = st.slider(
-        "Seuil de confiance",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.5,
-        step=0.05
-    )
-    
-    # Choix du modèle
-    model_choice = st.selectbox(
-        "Modèle",
-        ["yolov5s (rapide)", "yolov5m (précis)", "yolov5n (très rapide)"]
-    )
-    
-    model_map = {
-        "yolov5s (rapide)": "yolov5s",
-        "yolov5m (précis)": "yolov5m",
-        "yolov5n (très rapide)": "yolov5n"
-    }
+        "Seuil de confiance (%)",
+        min_value=0,
+        max_value=100,
+        value=50,
+        step=5
+    ) / 100
     
     st.markdown("---")
-    st.header("📊 Base de données")
+    st.header("📊 Base de données pièces")
     
     # Informations sur les pièces
     piece_info = {
@@ -69,168 +48,260 @@ with st.sidebar:
         "clou": {"prix": "0.10€", "stock": 1000, "emplacement": "D-01"}
     }
     
+    # Ajouter une nouvelle pièce
+    with st.expander("➕ Ajouter une pièce"):
+        new_piece = st.text_input("Nom")
+        new_price = st.text_input("Prix")
+        new_stock = st.number_input("Stock", min_value=0)
+        new_location = st.text_input("Emplacement")
+        if st.button("Ajouter"):
+            if new_piece and new_price and new_location:
+                piece_info[new_piece] = {
+                    "prix": new_price,
+                    "stock": new_stock,
+                    "emplacement": new_location
+                }
+                st.success(f"✅ Pièce {new_piece} ajoutée!")
+    
+    # Afficher le tableau
     df_info = pd.DataFrame(piece_info).T
-    st.dataframe(df_info)
+    st.dataframe(df_info, use_container_width=True)
 
-# Fonction pour charger le modèle YOLOv5
-@st.cache_resource
-def load_model(model_name="yolov5s"):
-    """Charger le modèle YOLOv5 via torch.hub"""
-    try:
-        with st.spinner(f"Chargement du modèle {model_name}..."):
-            # Charger depuis torch hub
-            model = torch.hub.load('ultralytics/yolov5', model_name, pretrained=True)
-            return model
-    except Exception as e:
-        st.error(f"Erreur chargement modèle: {e}")
-        return None
-
-# Fonction de détection
-def detect_objects(model, image, conf_threshold):
-    """Détecter les objets dans l'image"""
-    if model is None:
-        return None
+# Fonction de détection simulée (pour test)
+def simulate_detection(image, conf_threshold):
+    """Simule une détection (version sans YOLO)"""
+    height, width = image.shape[:2] if len(image.shape) == 3 else (image.shape[0], image.shape[1])
     
-    # Conversion de l'image si nécessaire
-    if isinstance(image, np.ndarray):
-        # Convertir BGR en RGB si nécessaire
-        if len(image.shape) == 3 and image.shape[2] == 3:
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        else:
-            image_rgb = image
-    else:
-        image_rgb = image
+    # Simuler des détections aléatoires pour la démo
+    import random
+    pieces = list(piece_info.keys())
+    num_detections = random.randint(0, 3)
     
-    # Faire la détection
-    results = model(image_rgb)
+    detections = []
+    for i in range(num_detections):
+        piece = random.choice(pieces)
+        conf = random.uniform(conf_threshold, 1.0)
+        
+        # Boîte aléatoire
+        x1 = random.randint(0, width - 100)
+        y1 = random.randint(0, height - 100)
+        x2 = x1 + random.randint(50, 150)
+        y2 = y1 + random.randint(50, 150)
+        
+        detections.append({
+            'name': piece,
+            'confidence': conf,
+            'xmin': x1,
+            'ymin': y1,
+            'xmax': x2,
+            'ymax': y2
+        })
     
-    # Convertir en DataFrame
-    detections = results.pandas().xyxy[0]
-    detections = detections[detections['confidence'] >= conf_threshold]
-    
-    return detections, results
+    return pd.DataFrame(detections)
 
 # Fonction pour dessiner les boîtes
-def draw_boxes(image, results):
+def draw_boxes(image, detections):
     """Dessiner les boîtes de détection sur l'image"""
-    if results is None:
-        return image
+    img = image.copy()
     
-    # Récupérer l'image avec les boîtes
-    img_with_boxes = results.render()[0]
-    return img_with_boxes
+    for _, det in detections.iterrows():
+        x1, y1, x2, y2 = int(det['xmin']), int(det['ymin']), int(det['xmax']), int(det['ymax'])
+        conf = det['confidence']
+        name = det['name']
+        
+        # Couleur différente par type de pièce
+        colors = {
+            'boulon': (0, 255, 0),    # Vert
+            'vis': (255, 0, 0),        # Bleu
+            'ecrou': (0, 0, 255),      # Rouge
+            'rondelle': (255, 255, 0), # Jaune
+            'clou': (255, 0, 255)      # Magenta
+        }
+        color = colors.get(name, (0, 255, 0))
+        
+        # Dessiner rectangle
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+        
+        # Préparer le label
+        label = f"{name} {conf:.0%}"
+        
+        # Dessiner le fond du texte
+        (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+        cv2.rectangle(img, (x1, y1 - h - 10), (x1 + w, y1), color, -1)
+        
+        # Dessiner le texte
+        cv2.putText(img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 
+                    0.5, (255, 255, 255), 2)
+    
+    return img
 
 # Interface principale
-col1, col2 = st.columns(2)
+tab1, tab2, tab3 = st.tabs(["📷 Caméra", "📁 Upload Image", "📊 Statistiques"])
 
-with col1:
-    st.header("📷 Image Source")
+with tab1:
+    st.header("Capture caméra")
     
-    image = None
-    video_path = None
+    # Capture caméra
+    img_file = st.camera_input("Prendre une photo")
     
-    if source == "📷 Caméra":
-        # Capture caméra
-        img_file = st.camera_input("Prendre une photo")
-        if img_file is not None:
-            bytes_data = img_file.getvalue()
-            image = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            st.image(image, caption="Image capturée", use_column_width=True)
-            
-    elif source == "📁 Upload image":
-        # Upload d'image
-        img_file = st.file_uploader("Choisir une image", type=['jpg', 'jpeg', 'png'])
-        if img_file is not None:
-            image = Image.open(img_file)
-            image = np.array(image)
-            st.image(image, caption="Image uploadée", use_column_width=True)
-            
-    else:  # Vidéo
-        video_file = st.file_uploader("Choisir une vidéo", type=['mp4', 'avi', 'mov'])
-        if video_file is not None:
-            # Sauvegarder temporairement la vidéo
-            tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-            tfile.write(video_file.read())
-            video_path = tfile.name
-            st.video(video_path)
-
-with col2:
-    st.header("🎯 Résultats Détection")
-    
-    if st.button("🚀 Lancer la détection", type="primary"):
-        if image is not None or video_path is not None:
-            # Charger le modèle
-            model_name = model_map[model_choice]
-            model = load_model(model_name)
-            
-            if model is not None:
-                if image is not None:
-                    # Détection sur image
-                    with st.spinner("Analyse de l'image en cours..."):
-                        detections, results = detect_objects(model, image, confidence)
+    if img_file is not None:
+        # Lire l'image
+        bytes_data = img_file.getvalue()
+        image = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Image originale")
+            st.image(image, use_column_width=True)
+        
+        with col2:
+            st.subheader("Résultat détection")
+            if st.button("🔍 Détecter les pièces", key="detect_cam"):
+                with st.spinner("Analyse en cours..."):
+                    # Simulation de détection
+                    detections = simulate_detection(image, confidence)
+                    
+                    if len(detections) > 0:
+                        st.success(f"✅ {len(detections)} pièce(s) détectée(s)!")
                         
-                        if detections is not None and len(detections) > 0:
-                            st.success(f"✅ {len(detections)} pièce(s) détectée(s)!")
-                            
-                            # Afficher l'image avec boîtes
-                            img_with_boxes = draw_boxes(image, results)
-                            st.image(img_with_boxes, caption="Résultat détection", use_column_width=True)
-                            
-                            # Afficher le tableau des détections
-                            st.subheader("📋 Détails des détections")
-                            
-                            # Ajouter les informations des pièces
-                            display_df = detections[['name', 'confidence', 'xmin', 'ymin', 'xmax', 'ymax']].copy()
-                            display_df['confiance (%)'] = (display_df['confidence'] * 100).round(1)
-                            
-                            # Ajouter les infos de la base
-                            display_df['prix'] = display_df['name'].map(lambda x: piece_info.get(x, {}).get('prix', 'N/A'))
-                            display_df['emplacement'] = display_df['name'].map(lambda x: piece_info.get(x, {}).get('emplacement', 'N/A'))
-                            
-                            st.dataframe(display_df[['name', 'confiance (%)', 'prix', 'emplacement']])
-                            
-                            # Log de la détection
-                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            st.caption(f"🕐 Détection effectuée le: {timestamp}")
-                            
-                        else:
-                            st.warning("⚠️ Aucune pièce détectée. Essayez d'ajuster le seuil de confiance.")
-                            
-                elif video_path is not None:
-                    st.info("🎥 Détection sur vidéo - Fonctionnalité à venir...")
-            else:
-                st.error("❌ Impossible de charger le modèle")
-        else:
-            st.warning("⚠️ Veuillez d'abord capturer ou uploader une image")
+                        # Dessiner les boîtes
+                        img_result = draw_boxes(image, detections)
+                        st.image(img_result, use_column_width=True)
+                        
+                        # Tableau des détections
+                        st.subheader("📋 Détails")
+                        display_df = detections[['name', 'confidence']].copy()
+                        display_df['confiance'] = (display_df['confidence'] * 100).round(1).astype(str) + '%'
+                        
+                        # Ajouter infos
+                        display_df['prix'] = display_df['name'].map(lambda x: piece_info.get(x, {}).get('prix', 'N/A'))
+                        display_df['emplacement'] = display_df['name'].map(lambda x: piece_info.get(x, {}).get('emplacement', 'N/A'))
+                        
+                        st.dataframe(display_df[['name', 'confiance', 'prix', 'emplacement']], 
+                                   use_container_width=True)
+                        
+                        # Log
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        st.caption(f"🕐 {timestamp}")
+                    else:
+                        st.warning("⚠️ Aucune pièce détectée")
+
+with tab2:
+    st.header("Upload image")
+    
+    # Upload d'image
+    uploaded_file = st.file_uploader("Choisir une image", type=['jpg', 'jpeg', 'png'])
+    
+    if uploaded_file is not None:
+        # Lire l'image
+        image = Image.open(uploaded_file)
+        image = np.array(image)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Image originale")
+            st.image(image, use_column_width=True)
+        
+        with col2:
+            st.subheader("Résultat détection")
+            if st.button("🔍 Détecter les pièces", key="detect_upload"):
+                with st.spinner("Analyse en cours..."):
+                    # Simulation de détection
+                    detections = simulate_detection(image, confidence)
+                    
+                    if len(detections) > 0:
+                        st.success(f"✅ {len(detections)} pièce(s) détectée(s)!")
+                        
+                        # Dessiner les boîtes
+                        img_result = draw_boxes(image, detections)
+                        st.image(img_result, use_column_width=True)
+                        
+                        # Tableau des détections
+                        st.subheader("📋 Détails")
+                        display_df = detections[['name', 'confidence']].copy()
+                        display_df['confiance'] = (display_df['confidence'] * 100).round(1).astype(str) + '%'
+                        
+                        # Ajouter infos
+                        display_df['prix'] = display_df['name'].map(lambda x: piece_info.get(x, {}).get('prix', 'N/A'))
+                        display_df['emplacement'] = display_df['name'].map(lambda x: piece_info.get(x, {}).get('emplacement', 'N/A'))
+                        
+                        st.dataframe(display_df[['name', 'confiance', 'prix', 'emplacement']], 
+                                   use_container_width=True)
+                        
+                        # Graphique
+                        st.subheader("📊 Répartition")
+                        chart_data = detections['name'].value_counts()
+                        st.bar_chart(chart_data)
+                        
+                        # Log
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        st.caption(f"🕐 {timestamp}")
+                    else:
+                        st.warning("⚠️ Aucune pièce détectée")
+
+with tab3:
+    st.header("📊 Statistiques globales")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Nombre de pièces", len(piece_info))
+    
+    with col2:
+        total_stock = sum([p['stock'] for p in piece_info.values()])
+        st.metric("Stock total", total_stock)
+    
+    with col3:
+        avg_price = sum([float(p['prix'].replace('€', '')) for p in piece_info.values()]) / len(piece_info)
+        st.metric("Prix moyen", f"{avg_price:.2f}€")
+    
+    # Tableau complet
+    st.subheader("Inventaire complet")
+    st.dataframe(df_info, use_container_width=True)
+    
+    # Graphique des stocks
+    st.subheader("Niveaux de stock")
+    stock_data = pd.DataFrame({
+        'Pièce': list(piece_info.keys()),
+        'Stock': [p['stock'] for p in piece_info.values()]
+    })
+    st.bar_chart(stock_data.set_index('Pièce'))
 
 # Pied de page
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center'>
-    <p>🏭 <strong>Système de Détection de Pièces d'Entrepôt</strong> - YOLOv5 + Streamlit</p>
-    <p>📸 Prenez une photo, uploadez une image ou une vidéo pour détecter automatiquement les pièces</p>
+    <p>🏭 <strong>Système de Détection de Pièces d'Entrepôt</strong> - Version Démo</p>
+    <p>📸 Prenez une photo ou uploadez une image pour simuler la détection</p>
+    <p>🔧 <em>Version sans YOLO pour compatibilité Streamlit Cloud</em></p>
     <p>🔗 <a href='https://github.com/aymaneaamr/detection-pieces-entrepot' target='_blank'>GitHub Repository</a></p>
 </div>
 """, unsafe_allow_html=True)
 
-# Instructions d'utilisation
-with st.expander("📖 Comment utiliser cette application"):
+# Instructions
+with st.expander("ℹ️ Comment ça marche"):
     st.markdown("""
-    ### Guide d'utilisation
+    ### Version Démo
+    Cette version utilise une **simulation de détection** pour démontrer l'interface.
     
-    1. **Choisissez une source d'image** dans la barre latérale
-    2. **Prenez une photo** avec votre caméra ou **uploader une image**
-    3. **Ajustez le seuil de confiance** si nécessaire
-    4. **Cliquez sur "Lancer la détection"**
-    5. **Visualisez les résultats** avec les boîtes de détection
+    ### Fonctionnalités
+    - ✅ Interface complète
+    - ✅ Base de données des pièces
+    - ✅ Simulation de détection
+    - ✅ Gestion d'inventaire
+    - ✅ Ajout de nouvelles pièces
     
-    ### Modèles disponibles
-    - **yolov5n** : Très rapide, moins précis (nano)
-    - **yolov5s** : Rapide, bon équilibre (small) - recommandé
-    - **yolov5m** : Plus lent, plus précis (medium)
+    ### Pour la version réelle avec YOLO
+    La version avec véritable détection YOLOv5 nécessite :
+    - Installation locale
+    - GPU recommandé
+    - Plus de ressources mémoire
     
-    ### Pièces détectables
-    - Boulons, vis, écrous, rondelles, clous
-    - Les informations (prix, stock, emplacement) sont affichées automatiquement
+    ### Prochaines étapes
+    1. Ajoute tes vraies photos dans `dataset/`
+    2. Entraîne le modèle YOLOv5
+    3. Remplace la simulation par le vrai modèle
     """)
