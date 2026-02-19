@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Détection de Pièces</title>
+</head>
+<body>
+    <h1>🏭 Détection de Pièces d'Entrepôt</h1>
+    
+    <h2>📸 Pièces disponibles :</h2>
+    <ul>
+        <li>Boulon</li>
+        <li>Vis</li>
+        <li>Écrou</li>
+    </ul>
+    
+    <h2>📊 Statistiques</h2>
+    <div id="stats">Chargement...</div>
+    
+    <script>
+        // Afficher les stats depuis GitHub
+        fetch('https://api.github.com/repos/aymaneaamr/detection-pieces-entrepot/contents/dataset')
+            .then(response => response.json())
+            .then(data => {
+                let html = '<ul>';
+                data.forEach(item => {
+                    html += `<li>${item.name}</li>`;
+                });
+                html += '</ul>';
+                document.getElementById('stats').innerHTML = html;
+            });
+    </script>
+</body>
+</html>
