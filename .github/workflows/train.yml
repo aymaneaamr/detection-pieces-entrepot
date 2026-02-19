@@ -1,0 +1,35 @@
+name: Entraînement YOLOv5
+
+on:
+  push:
+    paths:
+      - 'dataset/**'
+      - 'dataset.yaml'
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Installer Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      
+      - name: Installer YOLOv5
+        run: |
+          git clone https://github.com/ultralytics/yolov5
+          cd yolov5
+          pip install -r requirements.txt
+      
+      - name: Entraîner le modèle
+        run: |
+          cd yolov5
+          python train.py --img 640 --batch 16 --epochs 50 --data ../dataset.yaml --weights yolov5s.pt
+      
+      - name: Sauvegarder le modèle
+        uses: actions/upload-artifact@v2
+        with:
+          name: best-model
+          path: yolov5/runs/train/exp/weights/best.pt
