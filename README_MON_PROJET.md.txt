@@ -1,13 +1,10 @@
-# 🏭 Mon Projet de Détection de Pièces d'Entrepôt
+# 🏭 Système de Détection de Pièces d'Entrepôt
 
-Ce dossier contient mon projet personnel utilisant YOLOv5.
+## 📋 Description
+Ce projet utilise YOLOv5 pour détecter automatiquement les pièces dans un entrepôt.
 
-## 📁 Structure
-- `my_scripts/` : Mes scripts personnalisés
-- `my_dataset/` : Mes images et annotations
-- `my_models/` : Mes modèles entraînés
-
-## 🚀 Scripts
-- `capture.py` : Capture d'images avec webcam
-- `train_custom.py` : Entraînement personnalisé
-- `detect_warehouse.py` : Détection en temps réel
+## 🚀 Installation
+```bash
+git clone https://github.com/aymaneaamr/detection-pieces-entrepot.git
+cd detection-pieces-entrepot
+pip install -r requirements.txt
