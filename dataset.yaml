@@ -1,9 +1,8 @@
-# Configuration des pièces à détecter
-train: ./dataset/images/train
-val: ./dataset/images/val
+# Dataset configuration
+path: .
+train: dataset/images/train
+val: dataset/images/val
 
-# Nombre de pièces différentes
-nc: 3
-
-# Noms de tes pièces (à modifier selon tes besoins)
-names: ['boulon', 'vis', 'ecrou']
+# Classes
+nc: 1
+names: ['bus']
