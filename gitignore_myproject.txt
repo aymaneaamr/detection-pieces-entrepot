@@ -1,0 +1,10 @@
+# Mes fichiers personnels à ignorer
+my_dataset/images/*
+my_dataset/labels/*
+!my_dataset/images/.gitkeep
+!my_dataset/labels/.gitkeep
+my_models/*.pt
+*.db
+*.log
+__pycache__/
+*.pyc
